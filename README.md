@@ -13,7 +13,7 @@
    - `.part` 断点续传下载模型、保存规范 `.civitai.info` 与 `.preview.<ext>` 封面（可选跳过 NSFW）。
    - 下载完成后自动按 C 站模型名规范改名，并同步提取 `trainedWords` 写入原生 `.json` 触发词。
 2. **批量规范重命名 + 一键撤销**
-   - 18 种伴随文件联动重命名（`.safetensors` / `.ckpt` / `.civitai.info` / `.json` / `.preview.*` 等），两阶段临时文件原子更名 + 失败自动回滚。
+   - 22 种模型与伴随文件联动重命名（`.safetensors` / `.ckpt` / `.civitai.info` / `.json` / `.preview.*` / `.weilin-info.json` / `.source.json` 等），两阶段临时文件原子更名 + 失败自动回滚。
    - Checkpoint 自动保留版本号，同目录同名模型自动追加版本号防覆盖。
    - 每次批量改名持久化写入 `data/rename_history.json`，支持一键撤销还原原文件名。
 3. **一键整理体检**
@@ -26,7 +26,7 @@
 
 ## 安装方法（SD WebUI / Forge / Forge Neo）
 
-1. 在 WebUI 安装界面「从网址安装」填入本仓库地址，或直接克隆 / 解压到 `extensions/sd-webui-model-organizer`。
+1. 在 WebUI 安装界面「从网址安装」填入 `https://github.com/JHH-hub/sd-webui-model-organizer.git`，或直接克隆 / 解压到 `extensions/sd-webui-model-organizer`。
 2. **完全关闭并重新启动** SD WebUI / Forge，在顶部标签栏点击 **「模型整理助手」**。
 3. 如需配置代理或 API Key，可前往 `Settings → Model Organizer` 设置（或在下载页临时填写代理）。
 
