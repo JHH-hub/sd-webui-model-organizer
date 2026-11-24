@@ -594,51 +594,12 @@ def on_ui_tabs():
 
     with gr.Blocks(analytics_enabled=False) as ui_block:
         gr.Markdown(
-            "## 🗂️ Model Organizer · 模型下载整理与批量重命名助手\n"
-            "不改动内置 Extra Networks 卡片，与 Civitai Helper 零冲突共存；支持 C 站 `.com / .red` 切换、批量原子更名一键撤销、触发词同步与 Hash 补全。"
+            "## 🗂️ Model Organizer · 模型批量重命名与整理助手\n"
+            "不改动内置 Extra Networks 卡片，与 Civitai Helper 零冲突共存；支持批量规范更名、触发词/预览图/SHA-256 联网补全及 C 站 `.com / .red` 下载。"
         )
 
-        # ── Tab 1: C站下载与自动入库 ──
-        with gr.Tab("1. C站下载与自动入库"):
-            parsed_model_state = gr.State({})
-            with gr.Row():
-                dl_url = gr.Textbox(
-                    label="Civitai 模型链接或数字 ID",
-                    placeholder="https://civitai.com/models/123456?modelVersionId=789012 或 civitai.red 链接",
-                    scale=4,
-                )
-                dl_domain = gr.Radio(
-                    choices=["civitai.com", "civitai.red"],
-                    value=default_domain,
-                    label="站点域名",
-                    scale=2,
-                )
-            with gr.Row():
-                dl_proxy = gr.Textbox(
-                    label="临时代理覆盖（留空则使用 Settings 中的代理设置）",
-                    placeholder="socks5h://127.0.0.1:7890 或 http://127.0.0.1:7890",
-                    scale=4,
-                )
-                dl_parse_btn = gr.Button("🔍 解析模型信息", variant="secondary", scale=1)
-
-            dl_summary = gr.Markdown("输入模型链接并点击「解析模型信息」，也可直接选择类型与子目录后下载。")
-
-            with gr.Row():
-                dl_version = gr.Dropdown(choices=[], value=None, label="选择模型版本", scale=3)
-                dl_type = gr.Dropdown(choices=TYPE_CHOICES, value="lora", label="保存模型类型", scale=2)
-                dl_subfolder = gr.Dropdown(choices=lora_subs, value=ROOT_CHOICE, label="目标子目录", scale=2)
-                dl_new_sub = gr.Textbox(label="或新建子目录（可选）", placeholder="如：画风 / 角色", scale=2)
-
-            with gr.Row():
-                dl_auto_rename = gr.Checkbox(value=default_auto_rename, label="下载后自动按 C 站模型名规范重命名")
-                dl_auto_trig = gr.Checkbox(value=default_auto_trig, label="下载后自动生成触发词 .json")
-                dl_skip_nsfw = gr.Checkbox(value=default_skip_nsfw, label="跳过 NSFW 预览图")
-                dl_start_btn = gr.Button("⬇ 开始下载并自动入库", variant="primary")
-
-            dl_log = gr.Markdown("")
-
-        # ── Tab 2: 批量规范重命名（支持撤销） ──
-        with gr.Tab("2. 批量规范重命名（可撤销）"):
+        # ── Tab 1: 批量规范重命名 ──
+        with gr.Tab("1. 批量规范重命名"):
             rename_meta_state = gr.State([])
             with gr.Row():
                 rn_type = gr.Dropdown(choices=RENAME_TYPE_CHOICES, value="lora", label="目标目录类型", scale=2)
@@ -677,8 +638,8 @@ def on_ui_tabs():
 
             rn_log = gr.Markdown("")
 
-        # ── Tab 3: 一键整理体检 ──
-        with gr.Tab("3. 一键整理体检"):
+        # ── Tab 2: 一键整理体检 ──
+        with gr.Tab("2. 一键整理体检"):
             with gr.Row():
                 mt_type = gr.Dropdown(choices=TYPE_CHOICES, value="lora", label="模型目录", scale=2)
                 mt_subfolder = gr.Dropdown(choices=lora_subs, value=ROOT_CHOICE, label="子目录", scale=2)
@@ -716,6 +677,45 @@ def on_ui_tabs():
                     mt_orph_scan = gr.Button("🔍 仅扫描孤儿文件")
                     mt_orph_move = gr.Button("📦 安全移入隔离目录", variant="secondary")
                 mt_orph_out = gr.Markdown("")
+
+        # ── Tab 3: C站下载与自动入库 ──
+        with gr.Tab("3. C站下载与自动入库"):
+            parsed_model_state = gr.State({})
+            with gr.Row():
+                dl_url = gr.Textbox(
+                    label="Civitai 模型链接或数字 ID",
+                    placeholder="https://civitai.com/models/123456?modelVersionId=789012 或 civitai.red 链接",
+                    scale=4,
+                )
+                dl_domain = gr.Radio(
+                    choices=["civitai.com", "civitai.red"],
+                    value=default_domain,
+                    label="站点域名",
+                    scale=2,
+                )
+            with gr.Row():
+                dl_proxy = gr.Textbox(
+                    label="临时代理覆盖（留空则使用 Settings 中的代理设置）",
+                    placeholder="socks5h://127.0.0.1:7890 或 http://127.0.0.1:7890",
+                    scale=4,
+                )
+                dl_parse_btn = gr.Button("🔍 解析模型信息", variant="secondary", scale=1)
+
+            dl_summary = gr.Markdown("输入模型链接并点击「解析模型信息」，也可直接选择类型与子目录后下载。")
+
+            with gr.Row():
+                dl_version = gr.Dropdown(choices=[], value=None, label="选择模型版本", scale=3)
+                dl_type = gr.Dropdown(choices=TYPE_CHOICES, value="lora", label="保存模型类型", scale=2)
+                dl_subfolder = gr.Dropdown(choices=lora_subs, value=ROOT_CHOICE, label="目标子目录", scale=2)
+                dl_new_sub = gr.Textbox(label="或新建子目录（可选）", placeholder="如：画风 / 角色", scale=2)
+
+            with gr.Row():
+                dl_auto_rename = gr.Checkbox(value=default_auto_rename, label="下载后自动按 C 站模型名规范重命名")
+                dl_auto_trig = gr.Checkbox(value=default_auto_trig, label="下载后自动生成触发词 .json")
+                dl_skip_nsfw = gr.Checkbox(value=default_skip_nsfw, label="跳过 NSFW 预览图")
+                dl_start_btn = gr.Button("⬇ 开始下载并自动入库", variant="primary")
+
+            dl_log = gr.Markdown("")
 
         with gr.Row():
             refresh_btn = gr.Button("🔄 刷新 WebUI 模型列表", variant="secondary", scale=1)

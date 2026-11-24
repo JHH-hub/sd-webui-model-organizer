@@ -89,6 +89,8 @@ class GradioUISmokeTests(unittest.TestCase):
                     self.assertIsInstance(block, gr.Blocks)
                     self.assertEqual(title, "模型整理助手")
                     self.assertEqual(elem_id, "model_organizer")
+                    tab_labels = [c.label for c in block.blocks.values() if isinstance(c, gr.Tab)]
+                    self.assertEqual(tab_labels, ["1. 批量规范重命名", "2. 一键整理体检", "3. C站下载与自动入库"])
 
                     # Check table normalization compatibility
                     self.assertEqual(ui._normalize_table_rows({"data": [[True, "a"]]}), [[True, "a"]])
