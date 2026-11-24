@@ -7,13 +7,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .paths import logical_abspath
+
 MODEL_EXTS = (".safetensors", ".ckpt", ".pt", ".bin", ".pth")
 SIDECAR_SUFFIXES = (
     ".preview.jpeg",
     ".preview.webp",
     ".preview.png",
     ".preview.jpg",
+    ".safetensors.weilin-info.json",
+    ".ckpt.weilin-info.json",
+    ".pt.weilin-info.json",
     ".civitai.info",
+    ".source.json",
+    ".来源.json",
     ".info",
     ".json",
 )
@@ -22,6 +29,9 @@ IGNORED_FILES = {
     "not_found_hashes.json",
     "config.local.json",
     "config.json",
+    "adapter_config.json",
+    "model_index.json",
+    "tokenizer_config.json",
 }
 
 
@@ -87,24 +97,24 @@ def quarantine_orphans(
     if not orphan_paths:
         return {"moved": 0, "quarantine_dir": "", "errors": []}
 
-    base_resolved = base_dir.resolve()
+    base_logical = logical_abspath(base_dir)
     stamp = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
-    batch_dir = (quarantine_root / stamp).resolve()
+    batch_dir = logical_abspath(quarantine_root / stamp)
     moved = 0
     errors: list[str] = []
 
     for src in orphan_paths:
         try:
-            src_resolved = src.resolve()
-            if not src_resolved.is_file():
+            src_logical = logical_abspath(src)
+            if not src_logical.is_file():
                 continue
             try:
-                rel = src_resolved.relative_to(base_resolved)
+                rel = src_logical.relative_to(base_logical)
             except ValueError:
-                rel = Path(src_resolved.name)
+                rel = Path(src_logical.name)
             dst = batch_dir / rel
             dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(src_resolved), str(dst))
+            shutil.move(str(src_logical), str(dst))
             moved += 1
         except Exception as exc:
             errors.append(f"{src}: {exc}")

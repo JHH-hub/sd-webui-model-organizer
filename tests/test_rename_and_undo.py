@@ -1,7 +1,11 @@
+import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
+
+from model_organizer.paths import logical_abspath, safe_resolve_subdir
 
 from model_organizer.rename_engine import (
     RenameHistoryStore,
@@ -125,6 +129,51 @@ class RenameAndUndoTests(unittest.TestCase):
             self.assertFalse((root / "c.safetensors").exists())
             leftovers = [p for p in root.iterdir() if p.name.startswith(".__mo_tmp_")]
             self.assertEqual(leftovers, [])
+
+    def test_junction_safe_subdir_and_third_party_companions(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td) / "Lora"
+            ext_target = Path(td) / "ExternalPool"
+            base.mkdir()
+            ext_target.mkdir()
+
+            with self.assertRaises(ValueError):
+                safe_resolve_subdir(base, "../ExternalPool")
+
+            junc = base / "LinkedPool"
+            if os.name == "nt":
+                subprocess.run(["cmd", "/c", "mklink", "/J", str(junc), str(ext_target)], check=True, capture_output=True)
+            else:
+                junc.symlink_to(ext_target)
+
+            try:
+                resolved_sub = safe_resolve_subdir(base, "LinkedPool")
+                self.assertEqual(resolved_sub, logical_abspath(junc))
+
+                (junc / "old_j.safetensors").write_bytes(b"M")
+                (junc / "old_j.safetensors.weilin-info.json").write_text("{}", encoding="utf-8")
+                (junc / "old_j.source.json").write_text("{}", encoding="utf-8")
+                write_json_atomic(
+                    junc / "old_j.civitai.info",
+                    {"model": {"name": "JunctionStyle", "type": "LORA"}, "name": "v1"},
+                )
+
+                records = scan_rename_candidates(base, recursive=True)
+                self.assertEqual(len(records), 1)
+                self.assertEqual(records[0]["rel_dir"], "LinkedPool")
+                self.assertEqual(records[0]["file_count"], 4)
+
+                plan, errs = plan_renames([
+                    {"parent_dir": records[0]["parent_dir"], "base": "old_j", "new_name": "JunctionStyle", "enabled": True}
+                ])
+                self.assertEqual(errs, [])
+                execute_atomic_moves(plan)
+                self.assertTrue((junc / "JunctionStyle.safetensors").is_file())
+                self.assertTrue((junc / "JunctionStyle.safetensors.weilin-info.json").is_file())
+                self.assertTrue((junc / "JunctionStyle.source.json").is_file())
+            finally:
+                if os.name == "nt" and junc.exists():
+                    subprocess.run(["cmd", "/c", "rmdir", str(junc)], capture_output=True)
 
 
 if __name__ == "__main__":

@@ -22,6 +22,7 @@ from model_organizer import (  # noqa: E402
     backfill_missing_info,
     execute_atomic_moves,
     list_subfolders,
+    logical_abspath,
     normalize_domain,
     parse_civitai_url,
     plan_renames,
@@ -49,10 +50,10 @@ def _webui_root() -> Path:
 
         p = getattr(webui_paths, "script_path", None)
         if p:
-            return Path(p).resolve()
+            return logical_abspath(p)
     except Exception:
         pass
-    return ROOT.parent.parent if ROOT.parent.name.lower() == "extensions" else Path.cwd()
+    return logical_abspath(ROOT.parent.parent) if ROOT.parent.name.lower() == "extensions" else logical_abspath(Path.cwd())
 
 
 def _model_dirs() -> dict[str, Path]:
@@ -83,7 +84,7 @@ def _resolve_target_dir(model_type: str, subfolder_choice: str, custom_dir: str 
         raw = (custom_dir or "").strip()
         if not raw:
             raise ValueError("请先填写自定义目录路径")
-        p = Path(raw).resolve()
+        p = logical_abspath(raw)
         if not p.is_dir():
             raise FileNotFoundError(f"自定义目录不存在：{p}")
         return p

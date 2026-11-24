@@ -25,6 +25,11 @@ MODEL_TYPE_SPECS: dict[str, dict[str, str]] = {
 }
 
 
+def logical_abspath(path: Path | str) -> Path:
+    """Normalize . and .. without dereferencing Windows NTFS junctions/symlinks."""
+    return Path(os.path.abspath(os.fspath(path)))
+
+
 def _first_existing_dir(*values: Any) -> Path | None:
     for val in values:
         if not val:
@@ -35,17 +40,17 @@ def _first_existing_dir(*values: Any) -> Path | None:
                 return found
             continue
         try:
-            candidate = Path(os.fspath(val))
+            candidate = logical_abspath(os.fspath(val))
         except TypeError:
             continue
         if candidate.is_dir():
-            return candidate.resolve()
+            return candidate
     return None
 
 
 def resolve_model_dirs(webui_root: Path | None = None, cmd_opts: Any = None) -> dict[str, Path]:
     """Resolve model directories from WebUI cmd_opts or fallback to webui_root / cwd."""
-    root = Path(webui_root).resolve() if webui_root is not None else Path.cwd().resolve()
+    root = logical_abspath(webui_root) if webui_root is not None else logical_abspath(Path.cwd())
 
     opt_map = {
         "lora": ("lora_dir", "lora_dirs"),
@@ -60,7 +65,7 @@ def resolve_model_dirs(webui_root: Path | None = None, cmd_opts: Any = None) -> 
         if cmd_opts is not None:
             vals = [getattr(cmd_opts, attr, None) for attr in opt_map.get(key, ())]
             override = _first_existing_dir(*vals)
-        dirs[key] = override if override is not None else (root / spec["default_rel"]).resolve()
+        dirs[key] = override if override is not None else logical_abspath(root / spec["default_rel"])
     return dirs
 
 
@@ -82,14 +87,14 @@ def list_subfolders(base_dir: Path) -> list[str]:
 
 
 def safe_resolve_subdir(base_dir: Path, rel_sub: str) -> Path:
-    """Resolve rel_sub safely inside base_dir, rejecting path traversal."""
-    base_resolved = base_dir.resolve()
+    """Resolve rel_sub logically inside base_dir (preserving NTFS junctions, rejecting .. escape)."""
+    base_logical = logical_abspath(base_dir)
     clean = (rel_sub or "").strip().replace("\\", "/").strip("/")
     if not clean:
-        return base_resolved
-    target = (base_resolved / clean).resolve()
+        return base_logical
+    target = logical_abspath(base_logical / clean)
     try:
-        target.relative_to(base_resolved)
+        target.relative_to(base_logical)
     except ValueError as exc:
         raise ValueError(f"非法子目录路径（禁止越权跳转）：{rel_sub}") from exc
     return target

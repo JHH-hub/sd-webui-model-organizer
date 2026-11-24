@@ -2,7 +2,7 @@
 
 __version__ = "1.0.0"
 
-from .paths import MODEL_TYPE_SPECS, list_subfolders, resolve_model_dirs, safe_resolve_subdir
+from .paths import MODEL_TYPE_SPECS, list_subfolders, logical_abspath, resolve_model_dirs, safe_resolve_subdir
 from .rename_engine import (
     GROUP_SUFFIXES,
     INFO_SUFFIXES,
@@ -42,6 +42,7 @@ from .civitai_client import (
 __all__ = [
     "__version__",
     "MODEL_TYPE_SPECS",
+    "logical_abspath",
     "resolve_model_dirs",
     "list_subfolders",
     "safe_resolve_subdir",

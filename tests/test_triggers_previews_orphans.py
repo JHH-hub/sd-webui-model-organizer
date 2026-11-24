@@ -88,20 +88,30 @@ class TriggersPreviewsOrphansTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             (root / "Put LoRA here.txt").write_text("info", encoding="utf-8")
+            (root / "adapter_config.json").write_text("{}", encoding="utf-8")
             (root / "alive.safetensors").write_bytes(b"x")
             (root / "alive.civitai.info").write_text("{}", encoding="utf-8")
+            (root / "alive.safetensors.weilin-info.json").write_text("{}", encoding="utf-8")
+            (root / "alive.source.json").write_text("{}", encoding="utf-8")
+            (root / "alive.来源.json").write_text("{}", encoding="utf-8")
             (root / "dead_model.civitai.info").write_text("{}", encoding="utf-8")
             (root / "dead_model.preview.png").write_bytes(b"img")
+            (root / "dead_model.safetensors.weilin-info.json").write_text("{}", encoding="utf-8")
 
             orphans = scan_orphans(root, recursive=True)
             names = sorted(p.name for p in orphans)
-            self.assertEqual(names, ["dead_model.civitai.info", "dead_model.preview.png"])
+            self.assertEqual(
+                names,
+                ["dead_model.civitai.info", "dead_model.preview.png", "dead_model.safetensors.weilin-info.json"],
+            )
 
             qroot = Path(td) / "_quarantine"
             out = quarantine_orphans(orphans, root, qroot)
-            self.assertEqual(out["moved"], 2)
+            self.assertEqual(out["moved"], 3)
             self.assertFalse((root / "dead_model.civitai.info").exists())
             self.assertTrue((root / "alive.civitai.info").is_file())
+            self.assertTrue((root / "alive.safetensors.weilin-info.json").is_file())
+            self.assertTrue((root / "adapter_config.json").is_file())
             moved_files = list(Path(out["quarantine_dir"]).rglob("*"))
             self.assertEqual(sorted(p.name for p in moved_files if p.is_file()), names)
 

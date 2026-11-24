@@ -13,6 +13,7 @@ from model_organizer import (
     apply_preview_normalizations,
     apply_trigger_updates,
     backfill_missing_info,
+    logical_abspath,
     normalize_domain,
     parse_civitai_url,
     plan_renames,
@@ -31,14 +32,15 @@ def _default_history() -> RenameHistoryStore:
 
 
 def _cmd_scan(args: argparse.Namespace) -> int:
+    target = logical_abspath(args.directory)
     records = scan_rename_candidates(
-        Path(args.directory),
+        target,
         recursive=args.recursive,
         include_checkpoint_version=not args.no_checkpoint_version,
     )
     need = [r for r in records if r.get("needs_rename")]
     errs = [r for r in records if r.get("error")]
-    print(f"扫描目录: {Path(args.directory).resolve()}")
+    print(f"扫描目录: {target}")
     print(f"信息文件总数: {len(records)} | 建议更名: {len(need)} | 解析失败: {len(errs)}")
     for r in need[: args.limit]:
         loc = f"[{r['rel_dir']}] " if r["rel_dir"] != "." else ""
@@ -51,7 +53,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
 
 
 def _cmd_rename(args: argparse.Namespace) -> int:
-    target = Path(args.directory).resolve()
+    target = logical_abspath(args.directory)
     records = scan_rename_candidates(
         target,
         recursive=args.recursive,
@@ -96,7 +98,7 @@ def _cmd_undo(args: argparse.Namespace) -> int:
 
 
 def _cmd_sync_triggers(args: argparse.Namespace) -> int:
-    res = apply_trigger_updates(Path(args.directory).resolve(), recursive=args.recursive, dry_run=args.dry_run)
+    res = apply_trigger_updates(logical_abspath(args.directory), recursive=args.recursive, dry_run=args.dry_run)
     prefix = "[DRY-RUN] " if args.dry_run else ""
     print(
         f"{prefix}触发词同步完成：补全空白 {res['fill']} 个 | 新建 JSON {res['create']} 个 | 错误 {len(res['errors'])} 个"
@@ -110,7 +112,7 @@ def _cmd_sync_triggers(args: argparse.Namespace) -> int:
 
 def _cmd_normalize_previews(args: argparse.Namespace) -> int:
     res = apply_preview_normalizations(
-        Path(args.directory).resolve(),
+        logical_abspath(args.directory),
         recursive=args.recursive,
         mode=args.mode,
         dry_run=args.dry_run,
@@ -127,7 +129,7 @@ def _cmd_normalize_previews(args: argparse.Namespace) -> int:
 
 
 def _cmd_scan_orphans(args: argparse.Namespace) -> int:
-    target = Path(args.directory).resolve()
+    target = logical_abspath(args.directory)
     orphans = scan_orphans(target, recursive=args.recursive)
     print(f"扫描目录: {target}")
     print(f"发现孤儿伴随文件: {len(orphans)} 个")
@@ -136,7 +138,7 @@ def _cmd_scan_orphans(args: argparse.Namespace) -> int:
     if len(orphans) > 30:
         print(f"  ... 另有 {len(orphans) - 30} 个")
     if args.quarantine and orphans:
-        out = quarantine_orphans(orphans, target, Path(args.quarantine).resolve())
+        out = quarantine_orphans(orphans, target, logical_abspath(args.quarantine))
         print(f"已安全移入隔离目录 {out['quarantine_dir']}：{out['moved']} 个文件。")
     return 0
 
@@ -154,7 +156,7 @@ def _make_client(args: argparse.Namespace) -> CivitaiClient:
 def _cmd_fetch_hash(args: argparse.Namespace) -> int:
     client = _make_client(args)
     res = backfill_missing_info(
-        Path(args.directory).resolve(),
+        logical_abspath(args.directory),
         client,
         recursive=args.recursive,
         limit=args.limit,

@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .paths import logical_abspath
 from .trigger_sync import write_json_atomic
 
 INFO_SUFFIXES = (".civitai.info", ".info")
@@ -16,7 +18,12 @@ GROUP_SUFFIXES = (
     ".preview.webp",
     ".preview.png",
     ".preview.jpg",
+    ".safetensors.weilin-info.json",
+    ".ckpt.weilin-info.json",
+    ".pt.weilin-info.json",
     ".civitai.info",
+    ".source.json",
+    ".来源.json",
     ".safetensors",
     ".jpeg",
     ".webp",
@@ -136,15 +143,23 @@ def scan_rename_candidates(
     include_checkpoint_version: bool = True,
 ) -> list[dict[str, Any]]:
     """Scan .civitai.info/.info files and propose clean target filenames."""
-    if not directory.is_dir():
-        raise FileNotFoundError(f"目录不存在：{directory}")
+    base_logical = logical_abspath(directory)
+    if not base_logical.is_dir():
+        raise FileNotFoundError(f"目录不存在：{base_logical}")
 
-    base_resolved = directory.resolve()
-    iterator = base_resolved.rglob("*") if recursive else base_resolved.iterdir()
-    info_files = sorted(
-        p for p in iterator
-        if p.is_file() and any(p.name.lower().endswith(s) for s in INFO_SUFFIXES)
-    )
+    info_files: list[Path] = []
+    if recursive:
+        for root_str, dirnames, filenames in os.walk(base_logical):
+            dirnames[:] = sorted(d for d in dirnames if not d.startswith(".") and d != "__pycache__")
+            cur_dir = Path(root_str)
+            for name in filenames:
+                if any(name.lower().endswith(s) for s in INFO_SUFFIXES):
+                    info_files.append(cur_dir / name)
+    else:
+        for p in base_logical.iterdir():
+            if p.is_file() and any(p.name.lower().endswith(s) for s in INFO_SUFFIXES):
+                info_files.append(p)
+    info_files.sort(key=lambda p: str(p).casefold())
 
     # Prefer .civitai.info if both .civitai.info and .info exist for same stem in same dir
     dedup: dict[tuple[Path, str], Path] = {}
@@ -152,14 +167,14 @@ def scan_rename_candidates(
         base = info_base_name(p.name)
         if not base:
             continue
-        key = (p.parent.resolve(), base)
+        key = (logical_abspath(p.parent), base)
         prev = dedup.get(key)
         if prev is None or p.name.lower().endswith(".civitai.info"):
             dedup[key] = p
 
     records: list[dict[str, Any]] = []
     for (parent_dir, base), info_path in sorted(dedup.items(), key=lambda kv: str(kv[1]).casefold()):
-        rel_dir = "." if parent_dir == base_resolved else parent_dir.relative_to(base_resolved).as_posix()
+        rel_dir = "." if parent_dir == base_logical else parent_dir.relative_to(base_logical).as_posix()
         try:
             meta = load_info(info_path, include_checkpoint_version=include_checkpoint_version)
             rec: dict[str, Any] = {
@@ -201,7 +216,7 @@ def plan_renames(items: list[dict[str, Any]]) -> tuple[list[tuple[Path, Path]], 
     for item in items:
         if not item.get("enabled", True):
             continue
-        parent_dir = Path(item["parent_dir"]).resolve()
+        parent_dir = logical_abspath(item["parent_dir"])
         base = str(item["base"])
         new_name = sanitize_filename(item.get("new_name"))
         if not new_name:
@@ -218,13 +233,14 @@ def plan_renames(items: list[dict[str, Any]]) -> tuple[list[tuple[Path, Path]], 
     if errors:
         return [], errors
 
-    source_keys = {str(src.resolve()).casefold() for _, _, _, files in rows for src, _ in files}
+    source_keys = {str(logical_abspath(src)).casefold() for _, _, _, files in rows for src, _ in files}
     planned_dest_keys: set[str] = set()
     plan: list[tuple[Path, Path]] = []
 
     for parent_dir, _base, new_name, files in rows:
         for src, suffix in files:
-            dst = (parent_dir / f"{new_name}{suffix}").resolve()
+            src_abs = logical_abspath(src)
+            dst = logical_abspath(parent_dir / f"{new_name}{suffix}")
             dst_key = str(dst).casefold()
             if dst_key in planned_dest_keys:
                 errors.append(f"目标文件名重复冲突：{dst.name}")
@@ -232,8 +248,8 @@ def plan_renames(items: list[dict[str, Any]]) -> tuple[list[tuple[Path, Path]], 
                 errors.append(f"目标文件已存在：{dst.name}")
             else:
                 planned_dest_keys.add(dst_key)
-                if src.resolve() != dst or src.name != dst.name:
-                    plan.append((src, dst))
+                if src_abs != dst or src.name != dst.name:
+                    plan.append((src_abs, dst))
 
     if errors:
         return [], errors
@@ -344,11 +360,11 @@ class RenameHistoryStore:
             self._save(batches)
             return {"batch_id": batch["batch_id"], "restored": 0}
 
-        dst_keys = {str(src.resolve()).casefold() for src, _ in reverse_plan}
+        dst_keys = {str(logical_abspath(src)).casefold() for src, _ in reverse_plan}
         for current_file, original_file in reverse_plan:
             if not current_file.exists():
                 raise FileNotFoundError(f"无法撤销，文件已不存在：{current_file}")
-            orig_key = str(original_file.resolve()).casefold()
+            orig_key = str(logical_abspath(original_file)).casefold()
             if original_file.exists() and orig_key not in dst_keys:
                 raise FileExistsError(f"无法撤销，原路径已被占用：{original_file}")
 
