@@ -1,6 +1,6 @@
 """SD WebUI / Forge Model Organizer pure-Python core."""
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 from .paths import MODEL_TYPE_SPECS, list_subfolders, logical_abspath, resolve_model_dirs, safe_resolve_subdir
 from .rename_engine import (
@@ -38,6 +38,8 @@ from .civitai_client import (
     parse_civitai_url,
     rewrite_civitai_host,
 )
+from .card_meta import extract_example_images, load_card_metadata, resolve_model_file
+from .update_checker import check_model_updates, collect_local_civitai_models
 
 __all__ = [
     "__version__",
@@ -74,4 +76,9 @@ __all__ = [
     "rewrite_civitai_host",
     "compute_sha256",
     "backfill_missing_info",
+    "resolve_model_file",
+    "extract_example_images",
+    "load_card_metadata",
+    "collect_local_civitai_models",
+    "check_model_updates",
 ]

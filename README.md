@@ -1,8 +1,8 @@
 # SD WebUI Model Organizer（模型批量重命名与整理助手）
 
-轻量、无冲突的 **Stable Diffusion WebUI / Forge / Forge Neo** 模型批量重命名、信息补全与整理扩展（核心引擎与 `organizer_cli.py` 命令行同样适用于 **ComfyUI** 用户）。
+轻量、无冲突的 **Stable Diffusion WebUI / Forge / Forge Neo** 模型批量重命名、信息补全、新版检查与卡片随手交互扩展（核心引擎与 `organizer_cli.py` 命令行同样适用于 **ComfyUI** 用户）。
 
-> **设计原则**：不改动 WebUI 内置 Extra Networks 卡片与 DOM，可与 **Civitai Helper** 等已有插件零冲突共存；专为「浏览器在 C 站下完模型 → 一键补齐信息、触发词、封面并规范改名」的高频流程设计。
+> **设计原则**：不改动 WebUI 内置 `.button-row` 按钮，通过独立 FastAPI 接口与轻量悬停胶囊共存，可与 **Civitai Helper** 等已有插件兼容，同时兼容 **Gradio 3（A1111）与 Gradio 4（Forge / Forge Neo）**。
 
 ![Model Organizer 主界面预览](./docs/tab1-rename.png)
 
@@ -13,19 +13,22 @@
 - [一、你能用它解决什么问题](#一你能用它解决什么问题)
 - [二、安装与首次配置（必看）](#二安装与首次配置必看)
 - [三、两条最常用的上手路线](#三两条最常用的上手路线)
-- [四、三大功能页分步教程](#四三大功能页分步教程)
+- [四、绘图页卡片右上角随手交互（v1.1 新增）](#四绘图页卡片右上角随手交互v11-新增)
+- [五、三大功能页分步教程](#五三大功能页分步教程)
   - [Tab 1 · 1. 批量规范重命名](#tab-1--1-批量规范重命名)
   - [Tab 2 · 2. 一键整理体检](#tab-2--2-一键整理体检)
   - [Tab 3 · 3. C站下载与自动入库（备用）](#tab-3--3-c站下载与自动入库备用)
-- [五、ComfyUI 与独立命令行（CLI）教程](#五comfyui-与独立命令行cli教程)
-- [六、数据安全与本地存储说明](#六数据安全与本地存储说明)
-- [七、常见问题 FAQ](#七常见问题-faq)
-- [八、开源协议](#八开源协议)
+- [六、ComfyUI 与独立命令行（CLI）教程](#六comfyui-与独立命令行cli教程)
+- [七、数据安全与本地存储说明](#七数据安全与本地存储说明)
+- [八、常见问题 FAQ](#八常见问题-faq)
+- [九、开源协议](#九开源协议)
 
 ---
 
 ## 一、你能用它解决什么问题
 
+- **绘图页切 LoRA 来回切窗口**：画图时想看某张 LoRA 的触发词、作者例图与参考 Prompt 却得翻文件夹 → **悬停卡片右上角 3 枚小图标**直接跳转 C 站原页、一键塞入触发词、或在浮窗里左右翻看多张例图与生成参数并一键填入正负提示词。
+- **想知道本地模型有没有出 v2/v3 新版**：不用一个个点开网页核对 → **Tab 2 → ⑤ 批量检查 C 站新版本**按 `modelId` 去重扫一遍本地库，支持只提醒同底模更新。
 - **文件名乱成一团**：刚下的模型叫 `v15_final_fp16.safetensors` 或 `20250401_style.safetensors`，在面板里根本分不清是谁 → **按 `.civitai.info` 一键改为 C 站规范模型名**，模型本体、封面图、触发词 `.json`、第三方伴随文件等 **22 种后缀同步更名**。
 - **浏览器只下了一个 `.safetensors`**：没下 `.civitai.info` 和封面图，懒得回去翻网页贴链接 → **纯靠文件内容 SHA-256 指纹反查 C 站**，自动认出模型名并补全 `.civitai.info`、封面和触发词。
 - **选了 LoRA 却不知道触发词**：很多老模型没有原生 `.json` 或缺少 `activation text` → **递归从 `.civitai.info` 抽取 `trainedWords` 写入 `.json`**，同时绝不覆盖你手写修改过的提示词。
@@ -67,6 +70,8 @@
 | **下载或补全预览图时跳过 NSFW 标记图片** | 关闭 | 开启后联网拉封面会跳过带 NSFW 标记的预览图 |
 | **C站下载完成后自动按规范名重命名** | 开启 | 仅影响 Tab 3 下载入库流程 |
 | **C站下载完成后自动写入触发词 `.json`** | 开启 | 仅影响 Tab 3 下载入库流程 |
+| **在模型卡片右上角显示快捷交互按钮** | 开启 | 悬停 `txt2img / img2img` 模型卡片显示 🌐 / 🏷️ / 🖼️；不需可随时关闭 |
+| **例图浮窗中默认模糊 NSFW 标记图片** | 开启 | 例图弹窗浏览作者例图时默认模糊 NSFW 图片，点击遮罩可临时查看 |
 
 ---
 
@@ -93,7 +98,22 @@
 
 ---
 
-## 四、三大功能页分步教程
+## 四、绘图页卡片右上角随手交互（v1.1 新增）
+
+在 `txt2img` 或 `img2img` 的 **LoRA / Checkpoint / Textual Inversion / LyCORIS** 卡片列表中，把鼠标悬停到任意卡片上时，右上角原生按钮下方会自动浮现一组半透明快捷胶囊（`.mo-card-toolbar`）：
+
+- **`🌐` 打开 C 站原页**：自动读取本地 `.civitai.info` 的 `modelId` 与 `id`，按你在 `Settings → Model Organizer` 选定的 `civitai.com` 或 `civitai.red` 域名在新标签页直达原模型版本页。
+- **`🏷️` 一键塞入触发词**：优先读取 `.json` 的 `activation text`（若无则回退 `.civitai.info` 的 `trainedWords`），自动去重并补齐逗号追加到当前绘图页正向提示词框；**不会误触发插入 `<lora:...>`**。
+- **`🖼️` 作者例图 & 参考参数浮窗**：
+  - 左右翻看作者在 `.civitai.info` 里附带的多张静态例图（底部支持缩略图快速跳转；NSFW 例图受设置保护默认模糊，点击遮罩可临时查看）；
+  - 右侧自动解析每张例图的 **底模、采样器、Steps、CFG、Seed、尺寸** 以及完整正/负向 `Prompt`；
+  - 支持 **「+ 塞入触发词」**、**「✨ 一键填入正负提示词」**、**「➕ 追加正向词」** 与 **「📋 复制 Prompt」**，按 `ESC` 或点背景即可关闭。
+
+> **架构与兼容说明**：后端通过 WebUI 标准 `on_app_started` 注册轻量 FastAPI 只读接口（`/model_organizer/v1/config` 与 `/model_organizer/v1/card_meta`），前端 `javascript/model_organizer_cards.js` 采用悬停注入，**不修改内置卡片 DOM**；且通过 `on_before_ui` 仅放行这 2 个公开前端静态文件，跨盘符号链接 / NTFS Junction 挂载也可正常加载。可在 `Settings → Model Organizer` 随时一键关闭。
+
+---
+
+## 五、三大功能页分步教程
 
 ### Tab 1 · `1. 批量规范重命名`
 
@@ -125,7 +145,7 @@
 
 ![一键整理体检界面](./docs/tab2-maintenance.png)
 
-先在顶部选定 **`模型目录`**、**`子目录`** 与是否 **`递归处理全部子目录`**，以下 4 项均支持先「预检 / 扫描」看清范围后再实际写入：
+先在顶部选定 **`模型目录`**、**`子目录`** 与是否 **`递归处理全部子目录`**，以下 5 项均支持先「预检 / 扫描 / 只读检查」后再执行变更：
 
 1. **① 递归补全触发词 `.json`（永不覆盖已有手写提示词）**
    - 读取 `.civitai.info` 中的 `trainedWords`，自动剥离 `<lora:...>` 标签并去重，写入 WebUI 原生同名 `.json` 的 `activation text` 字段（连同 `baseModel` 一起建立或补齐空字段）。
@@ -148,6 +168,11 @@
    - 内置保护白名单，自动忽略 `config.json`、`adapter_config.json`、`model_index.json`、`tokenizer_config.json`、`rename_history.json`、`not_found_hashes.json` 等工程配置。
    - 点击 **`📦 安全移入隔离目录`** 后，文件会保留相对目录结构移动到 `extensions/sd-webui-model-organizer/data/quarantine/<时间戳>/` 下，**绝不会做永久删除**。
 
+5. **⑤ 批量检查 C 站新版本（Check New Version）**
+   - 扫描所选目录下的 `.civitai.info` / `.info`，按 `modelId` 自动去重并与本地已有最高版本对比，联网查询 C 站是否发布了更新的 `Published` 版本。
+   - 支持 **`仅提醒同底模版本`**（默认开启）：例如你本地是 `Illustrious` 版本时，不会拿作者新发的 `Flux` 或 `SD1.5` 分支来打扰你；取消勾选即可检查全底模新版。
+   - 发现更新后会列出 **`模型名 | 本地版本 | 最新版本 | 底模 | 发布日期 | C 站链接`** 表格（默认单次检查上限 `30` 个模型，可在滑块调整 `1～100`）。
+
 ---
 
 ### Tab 3 · `3. C站下载与自动入库（备用）`
@@ -163,13 +188,13 @@
 
 ---
 
-## 五、ComfyUI 与独立命令行（CLI）教程
+## 六、ComfyUI 与独立命令行（CLI）教程
 
 如果你平时主要使用 **ComfyUI**（目录通常是 `D:\ComfyUI\models\loras` 或 `checkpoints`）：
 - **可视化操作**：若本机也装了 SD WebUI / Forge，在 **`Tab 1 → 目标目录类型`** 里选择 **`自定义目录`**，直接填入你的 ComfyUI 模型路径即可扫描更名；
 - **纯命令行直接跑（无需启动 WebUI）**：直接用 Python 运行插件根目录下的 `organizer_cli.py`（依赖仅 `requests` 与 `Pillow`）。
 
-### 全部 8 个子命令速查
+### 全部 9 个子命令速查
 
 | 子命令 | 作用 | 关键参数 |
 | --- | --- | --- |
@@ -180,6 +205,7 @@
 | `normalize-previews <dir>` | 规范化预览图为 `.preview.<ext>` 或真 PNG | `--recursive`、`--mode keep_ext\|convert_png`、`--dry-run` |
 | `scan-orphans <dir>` | 扫描孤儿伴随文件（加 `--quarantine` 才移动） | `--recursive`、`--quarantine <隔离目录>` |
 | `fetch-hash <dir>` | 计算 SHA-256 联网补全 `.civitai.info`/封面/触发词 | `--domain`、`--proxy`、`--api-key`、`--limit`、`--recursive`、`--no-preview`、`--no-triggers` |
+| `check-updates <dir>` | 批量检查本地模型在 C 站是否有新版本 | `--domain`、`--proxy`、`--api-key`、`--limit`、`--recursive`、`--all-base-models` |
 | `download <url_or_id> <dir>` | 从 C 站下载并自动改名整理 | `--domain`、`--proxy`、`--api-key`、`--version-id`、`--skip-nsfw`、`--no-rename`、`--no-triggers` |
 
 ### 常用命令示例
@@ -188,31 +214,34 @@
 # 1. 为只有 .safetensors 的 ComfyUI LoRA 目录按 SHA-256 联网补全信息与封面（每次 30 个，走本地代理）
 python organizer_cli.py fetch-hash "D:\ComfyUI\models\loras" --recursive --domain civitai.red --proxy "http://127.0.0.1:7890" --limit 30
 
-# 2. 只读扫描可重命名模型
+# 2. 批量检查哪些模型出了同底模新版（加 --all-base-models 可检查跨底模新版）
+python organizer_cli.py check-updates "D:\ComfyUI\models\loras" --recursive --domain civitai.red --proxy "http://127.0.0.1:7890" --limit 30
+
+# 3. 只读扫描可重命名模型
 python organizer_cli.py scan "D:\ComfyUI\models\loras" --recursive
 
-# 3. 先用 --dry-run 预演改名，再去掉 --dry-run 正式执行
+# 4. 先用 --dry-run 预演改名，再去掉 --dry-run 正式执行
 python organizer_cli.py rename "D:\ComfyUI\models\loras" --recursive --dry-run
 python organizer_cli.py rename "D:\ComfyUI\models\loras" --recursive
 
-# 4. 如果后悔了，一键撤销最近一次批量改名
+# 5. 如果后悔了，一键撤销最近一次批量改名
 python organizer_cli.py undo
 
-# 5. 触发词补全 & 预览图规范化（均建议先加 --dry-run 预检）
+# 6. 触发词补全 & 预览图规范化（均建议先加 --dry-run 预检）
 python organizer_cli.py sync-triggers "D:\ComfyUI\models\loras" --recursive --dry-run
 python organizer_cli.py normalize-previews "D:\ComfyUI\models\loras" --recursive --mode keep_ext
 
-# 6. 扫描孤儿文件；确认后指定隔离目录移入（不直接删除）
+# 7. 扫描孤儿文件；确认后指定隔离目录移入（不直接删除）
 python organizer_cli.py scan-orphans "D:\ComfyUI\models\loras" --recursive
 python organizer_cli.py scan-orphans "D:\ComfyUI\models\loras" --recursive --quarantine ".\data\quarantine"
 
-# 7. 下载单个模型并自动改名、同步触发词
+# 8. 下载单个模型并自动改名、同步触发词
 python organizer_cli.py download "https://civitai.red/models/123456" "D:\ComfyUI\models\loras" --domain civitai.red --proxy "http://127.0.0.1:7890"
 ```
 
 ---
 
-## 六、数据安全与本地存储说明
+## 七、数据安全与本地存储说明
 
 - **两阶段原子更名与自动回滚**：批量重命名先检查目标冲突与权限，执行时全部先迁至同级唯一临时名，再统一落位；任意一步出错会立刻回滚已移动文件，避免只改了一半导致模型和 `.civitai.info` 脱节。
 - **严防覆盖原则**：重命名同目录同名冲突自动跳过并告警；触发词同步永不覆盖已有 `activation text`；孤儿清理永远是移动到隔离区而非删除。
@@ -224,7 +253,7 @@ python organizer_cli.py download "https://civitai.red/models/123456" "D:\ComfyUI
 
 ---
 
-## 七、常见问题 FAQ
+## 八、常见问题 FAQ
 
 <details>
 <summary><b>Q1：我平时直接在浏览器去 C 站点击 Download，手里只有单个 <code>.safetensors</code>，没有链接也没下载 <code>.civitai.info</code>，插件能认出名字吗？</b></summary>
@@ -249,13 +278,13 @@ python organizer_cli.py download "https://civitai.red/models/123456" "D:\ComfyUI
 <details>
 <summary><b>Q4：支持 Windows 跨盘符挂载（NTFS Junction / <code>mklink /J</code>）的子目录吗？</b></summary>
 
-支持。`LoRA` / `Checkpoint` 等目录下挂载到其他盘（例如 D 盘、G 盘）的子文件夹均可通过路径校验正常扫描、更名、补触发词与清理孤儿，不会报越权路径错误。
+支持。`LoRA` / `Checkpoint` 等目录下挂载到其他盘（例如 D 盘、G 盘）的子文件夹均可通过路径校验正常扫描、更名、补触发词与清理孤儿，不会报越权路径错误；同时前端静态 JS/CSS 也会在启动时单独放行，扩展本身通过 Junction 挂载也能正常加载卡片工具栏。
 </details>
 
 <details>
 <summary><b>Q5：会和我已经装了的 Civitai Helper 冲突吗？</b></summary>
 
-不会。本扩展采用独立顶栏标签页运行，不注入、不篡改 Extra Networks 内置模型卡片 DOM，域名与代理配置也独立存储，可与 Civitai Helper、Tagger、SuperMerger 等常见扩展安全共存。
+不会。主管理面板采用独立顶栏标签页运行，卡片右上角的 `🌐 / 🏷️ / 🖼️` 按钮也仅在鼠标悬停时附加独立胶囊（`.mo-card-toolbar`），**不会修改或删除原生 `.button-row` 按钮及 Civitai Helper 的 DOM**，且可在 `Settings → Model Organizer` 随时一键关闭卡片按钮，两套插件可完全互补共存。
 </details>
 
 <details>
@@ -266,6 +295,6 @@ python organizer_cli.py download "https://civitai.red/models/123456" "D:\ComfyUI
 
 ---
 
-## 八、开源协议
+## 九、开源协议
 
 本项目基于 [MIT License](./LICENSE) 开源 · By [像素离散 Pxlsan](https://pxlsan.cn)

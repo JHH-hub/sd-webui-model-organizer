@@ -17,11 +17,14 @@ from model_organizer import (  # noqa: E402
     CivitaiClient,
     CivitaiConfig,
     RenameHistoryStore,
+    __version__,
     apply_preview_normalizations,
     apply_trigger_updates,
     backfill_missing_info,
+    check_model_updates,
     execute_atomic_moves,
     list_subfolders,
+    load_card_metadata,
     logical_abspath,
     normalize_domain,
     parse_civitai_url,
@@ -231,6 +234,26 @@ def on_ui_settings() -> None:
         shared.OptionInfo(
             True,
             "C站下载完成后自动写入触发词 .json",
+            gr.Checkbox,
+            {"interactive": True},
+            section=section,
+        ),
+    )
+    shared.opts.add_option(
+        "mo_enable_card_buttons",
+        shared.OptionInfo(
+            True,
+            "在模型卡片右上角显示快捷交互按钮（打开 C 站 / 塞触发词 / 翻例图）",
+            gr.Checkbox,
+            {"interactive": True},
+            section=section,
+        ),
+    )
+    shared.opts.add_option(
+        "mo_blur_nsfw_gallery",
+        shared.OptionInfo(
+            True,
+            "例图浮窗中默认模糊 NSFW 标记图片（点击可查看）",
             gr.Checkbox,
             {"interactive": True},
             section=section,
@@ -584,6 +607,57 @@ def handle_maint_orphans(model_type: str, subfolder_choice: str, recursive: bool
         return f"❌ 孤儿扫描失败：{exc}"
 
 
+def _md_cell(val: Any) -> str:
+    return str(val or "").replace("|", "\\|").replace("\r", " ").replace("\n", " ").strip()
+
+
+def handle_maint_check_updates(
+    model_type: str,
+    subfolder_choice: str,
+    recursive: bool,
+    domain: str,
+    limit: int,
+    same_base_model_only: bool,
+) -> str:
+    try:
+        target_dir = _resolve_target_dir(model_type, subfolder_choice)
+        client = _make_client(domain=domain)
+        res = check_model_updates(
+            target_dir,
+            client,
+            recursive=bool(recursive),
+            limit=int(limit),
+            same_base_model_only=bool(same_base_model_only),
+        )
+        lines = [
+            "### 🔔 C 站新版本检查结果",
+            f"- 目标目录：`{target_dir}`",
+            (
+                f"- 本地含 C 站 ID 模型：{res['total_models']} 个 | 本次检查：{res['checked']} 个 | "
+                f"发现新版：**{res['updates_found']} 个** | 已是最新：{res['up_to_date']} 个 | 错误：{len(res['errors'])} 个"
+            ),
+        ]
+        if res["updates"]:
+            lines.extend([
+                "",
+                "| 模型名 | 本地版本 | 最新版本 | 底模 | 发布日期 | C 站链接 |",
+                "| --- | --- | --- | --- | --- | --- |",
+            ])
+            for u in res["updates"]:
+                lines.append(
+                    f"| {_md_cell(u['model_name'])} | {_md_cell(u['local_version_name'])} | "
+                    f"**{_md_cell(u['latest_version_name'])}** | {_md_cell(u['base_model']) or '-'} | "
+                    f"{_md_cell(u['published_at']) or '-'} | [查看新版 ↗]({u['url']}) |"
+                )
+        elif res["checked"] > 0 and not res["errors"]:
+            lines.append("- ✅ 所检查的模型目前均已处于对应底模最新版本。")
+        for err in res["errors"][:5]:
+            lines.append(f"- ⚠️ {err}")
+        return "\n".join(lines)
+    except Exception as exc:
+        return f"❌ 检查新版本失败：{exc}"
+
+
 def on_ui_tabs():
     default_domain = normalize_domain(str(_opts_get("mo_civitai_domain", "civitai.com")))
     default_auto_rename = bool(_opts_get("mo_auto_rename_on_download", True))
@@ -678,6 +752,14 @@ def on_ui_tabs():
                     mt_orph_move = gr.Button("📦 安全移入隔离目录", variant="secondary")
                 mt_orph_out = gr.Markdown("")
 
+            with gr.Accordion("⑤ 批量检查 C 站新版本（Check New Version）", open=False):
+                with gr.Row():
+                    mt_upd_domain = gr.Radio(choices=["civitai.com", "civitai.red"], value=default_domain, label="查询域名", scale=2)
+                    mt_upd_limit = gr.Slider(minimum=1, maximum=100, step=1, value=30, label="单次最多检查模型数", scale=2)
+                    mt_upd_same_base = gr.Checkbox(value=True, label="仅提醒同底模版本", scale=1)
+                    mt_upd_btn = gr.Button("🔎 检查新版本", variant="primary", scale=1)
+                mt_upd_out = gr.Markdown("")
+
         # ── Tab 3: C站下载与自动入库 ──
         with gr.Tab("3. C站下载与自动入库"):
             parsed_model_state = gr.State({})
@@ -720,7 +802,7 @@ def on_ui_tabs():
         with gr.Row():
             refresh_btn = gr.Button("🔄 刷新 WebUI 模型列表", variant="secondary", scale=1)
             refresh_out = gr.Markdown(
-                "开源工具：Model Organizer v1.0 · MIT License · [像素离散 Pxlsan](https://pxlsan.cn)",
+                "开源工具：Model Organizer v1.1 · MIT License · [像素离散 Pxlsan](https://pxlsan.cn)",
             )
 
         # ── Event Bindings ──
@@ -797,10 +879,71 @@ def on_ui_tabs():
             inputs=[mt_type, mt_subfolder, mt_recursive],
             outputs=[mt_orph_out],
         )
+        mt_upd_btn.click(
+            fn=handle_maint_check_updates,
+            inputs=[mt_type, mt_subfolder, mt_recursive, mt_upd_domain, mt_upd_limit, mt_upd_same_base],
+            outputs=[mt_upd_out],
+        )
         refresh_btn.click(fn=_refresh_webui_models, inputs=[], outputs=[refresh_out])
 
     return [(ui_block, "模型整理助手", "model_organizer")]
 
 
+PUBLIC_FRONTEND_ASSETS = (
+    ROOT / "javascript" / "model_organizer_cards.js",
+    ROOT / "style.css",
+)
+
+
+def _allow_public_frontend_assets(target_list: Any) -> None:
+    if not isinstance(target_list, list):
+        return
+    for asset in PUBLIC_FRONTEND_ASSETS:
+        if not asset.is_file():
+            continue
+        for candidate in (str(asset.resolve()), str(asset)):
+            if candidate not in target_list:
+                target_list.append(candidate)
+
+
+def on_before_ui() -> None:
+    """Allow Gradio to serve the two public frontend assets when mounted via junction/symlink."""
+    _allow_public_frontend_assets(getattr(getattr(shared, "cmd_opts", None), "gradio_allowed_path", None))
+
+
+def on_app_started(demo: Any, app: Any) -> None:
+    """Register lightweight REST endpoints for card quick-actions without hidden textboxes."""
+    _allow_public_frontend_assets(getattr(demo, "allowed_paths", None))
+    if app is None or not hasattr(app, "get"):
+        return
+
+    @app.get("/model_organizer/v1/config")
+    def _mo_get_config() -> dict[str, Any]:
+        return {
+            "enable_card_buttons": bool(_opts_get("mo_enable_card_buttons", True)),
+            "blur_nsfw_gallery": bool(_opts_get("mo_blur_nsfw_gallery", True)),
+            "domain": normalize_domain(str(_opts_get("mo_civitai_domain", "civitai.com"))),
+            "version": __version__,
+        }
+
+    @app.get("/model_organizer/v1/card_meta")
+    def _mo_get_card_meta(model_type: str = "lora", name: str = "", path: str = "") -> dict[str, Any]:
+        try:
+            domain = normalize_domain(str(_opts_get("mo_civitai_domain", "civitai.com")))
+            return load_card_metadata(
+                _model_dirs(),
+                model_type=model_type,
+                name=name,
+                path_hint=path,
+                domain=domain,
+            )
+        except Exception as exc:
+            return {"found": False, "error": str(exc)}
+
+
 script_callbacks.on_ui_settings(on_ui_settings)
 script_callbacks.on_ui_tabs(on_ui_tabs)
+if hasattr(script_callbacks, "on_before_ui"):
+    script_callbacks.on_before_ui(on_before_ui)
+if hasattr(script_callbacks, "on_app_started"):
+    script_callbacks.on_app_started(on_app_started)

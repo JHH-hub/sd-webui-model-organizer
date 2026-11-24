@@ -13,6 +13,7 @@ from model_organizer import (
     apply_preview_normalizations,
     apply_trigger_updates,
     backfill_missing_info,
+    check_model_updates,
     logical_abspath,
     normalize_domain,
     parse_civitai_url,
@@ -170,6 +171,29 @@ def _cmd_fetch_hash(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_check_updates(args: argparse.Namespace) -> int:
+    client = _make_client(args)
+    res = check_model_updates(
+        logical_abspath(args.directory),
+        client,
+        recursive=args.recursive,
+        limit=args.limit,
+        same_base_model_only=not args.all_base_models,
+    )
+    print(
+        f"本地含 Civitai ID 模型: {res['total_models']} 个 | 本次检查: {res['checked']} 个 | "
+        f"发现新版: {res['updates_found']} 个 | 已是最新: {res['up_to_date']} 个 | 错误: {len(res['errors'])} 个"
+    )
+    for u in res["updates"]:
+        print(
+            f"  [UPDATE] {u['model_name']}: {u['local_version_name']} -> {u['latest_version_name']} "
+            f"[{u['base_model']}] ({u['published_at']}) {u['url']}"
+        )
+    for err in res["errors"][:10]:
+        print(f"  [ERR] {err}", file=sys.stderr)
+    return 0
+
+
 def _cmd_download(args: argparse.Namespace) -> int:
     client = _make_client(args)
     model_id, parsed_ver = parse_civitai_url(args.url_or_id)
@@ -254,6 +278,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_hash.add_argument("--no-preview", action="store_true")
     p_hash.add_argument("--no-triggers", action="store_true")
     p_hash.set_defaults(func=_cmd_fetch_hash)
+
+    p_upd = sub.add_parser("check-updates", help="批量检查本地 .civitai.info 模型在 C 站是否有新版本")
+    p_upd.add_argument("directory")
+    p_upd.add_argument("--domain", default="civitai.com")
+    p_upd.add_argument("--proxy", default="")
+    p_upd.add_argument("--api-key", default="")
+    p_upd.add_argument("--limit", type=int, default=30)
+    p_upd.add_argument("--recursive", action="store_true")
+    p_upd.add_argument("--all-base-models", action="store_true", help="包含不同底模（默认仅提醒同底模新版）")
+    p_upd.set_defaults(func=_cmd_check_updates)
 
     p_dl = sub.add_parser("download", help="从 Civitai (.com/.red) 下载模型并自动改名/补全触发词")
     p_dl.add_argument("url_or_id")

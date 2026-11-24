@@ -40,8 +40,10 @@ def _install_fake_webui_modules(lora_dir: Path):
     cb_mod = types.ModuleType("modules.script_callbacks")
     cb_mod._settings = []
     cb_mod._tabs = []
+    cb_mod._app_started = []
     cb_mod.on_ui_settings = lambda fn: cb_mod._settings.append(fn)
     cb_mod.on_ui_tabs = lambda fn: cb_mod._tabs.append(fn)
+    cb_mod.on_app_started = lambda fn: cb_mod._app_started.append(fn)
 
     modules_pkg.shared = shared_mod
     modules_pkg.script_callbacks = cb_mod
@@ -80,8 +82,11 @@ class GradioUISmokeTests(unittest.TestCase):
                         "mo_skip_nsfw_preview",
                         "mo_auto_rename_on_download",
                         "mo_auto_sync_triggers_on_download",
+                        "mo_enable_card_buttons",
+                        "mo_blur_nsfw_gallery",
                     ):
                         self.assertIn(k, opts.options)
+                    self.assertEqual(len(fakes["modules.script_callbacks"]._app_started), 1)
 
                     tabs = ui.on_ui_tabs()
                     self.assertEqual(len(tabs), 1)
