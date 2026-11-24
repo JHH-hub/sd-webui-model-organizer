@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+data/rename_history.json
+data/not_found_hashes.json
+data/quarantine/
+*.local.json
